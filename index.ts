@@ -1,51 +1,68 @@
 import ky from "ky";
-import { err, ok, ResultAsync } from "neverthrow";
-import * as readline from 'readline';
-import repl from 'node:repl';
+import { Err, err, errAsync, ok, okAsync, ResultAsync } from "neverthrow";
+import type { GetHistoryResponse, Message } from "./types";
+const token = process.env.PRONTO_TOKEN;
 
-type VerificationResponse = {
-  ok: true;
-  length: number;
-} | {
-  ok: false;
-  error: string;
-}
-
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout
-});
-
-function getToken(email: string) {
-  // send verification email req
+function getBubbleHistory(): ResultAsync<
+  {
+    messages: Message[];
+    // includes all of the messages in `messages` and also a few more to give context for replies etc.
+    contextualMessages: Message[];
+  },
+  string
+> {
+  if (!token) return errAsync("PRONTO_TOKEN is not set");
   return ResultAsync.fromPromise(
-    ky.post('https://accounts.pronto.io/api/v1/user.verify', { json: { email } }).json<VerificationResponse>(), (e) => e as string
+    ky
+      .post("https://stanfordohs.pronto.io/api/v1/bubble.history", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        json: { bubble_id: 3640189 },
+      })
+      .json<GetHistoryResponse>(),
+    (e) => e as string,
   )
-    .map(async value => {
-      if (!value.ok) return err(value.error);
-      return ok(await new Promise<string>((resolve) => {
-        rl.question(
-          `Enter the code sent to ${email} (${value.length} digits): `,
-          (code) => resolve(code)
+    .map((e) => (e.ok ? ok(e) : err("Response not OK")))
+    .andThen((e) => e)
+    .map(async (initialHistory) => {
+      let messages = initialHistory.messages;
+      let contextualMessages = messages.concat(initialHistory.parentmessages);
+      while (messages.length < 10) {
+        const nextHistory = await ResultAsync.fromPromise(
+          ky
+            .post("https://stanfordohs.pronto.io/api/v1/bubble.history", {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+              json: {
+                bubble_id: 3640189,
+                latest: messages[messages.length - 1]?.bubble_id ?? -1,
+              },
+            })
+            .json<GetHistoryResponse>(),
+          (e) => e as string,
         )
-      }));
-    })
-    .andThen(e => e)
-    .map(code =>
-    ky.post('https://accounts.pronto.io/api/v3/user.login', {
-      json: {
-        email,
-        code: (() => { console.log(code); return code; })(),
-        // "device": {
-        //   "browsername": "chrome",
-        //   "browserversion": "139.0.0",
-        //   "osname": "Mac OS",
-        //   "type": "WEB"
-        // }
+          .map((e) => (e.ok ? err("Response not OK") : ok(e)))
+          .andThen((e) => e);
+        if (nextHistory.isErr()) {
+          return err(nextHistory.error);
+        } else {
+          messages = messages.concat(nextHistory.value.messages);
+          contextualMessages = messages.concat(
+            nextHistory.value.parentmessages,
+          );
+        }
       }
-    }).json()
-  );
+      return ok({ messages, contextualMessages });
+    })
+    .andThen((e) => e);
 }
-const TEST_INVALID_EMAIL = 'invalid@example.com';
-const TEST_VALID_EMAIL = 'aadish@ohs.stanford.edu';
-const value = (await getToken(TEST_VALID_EMAIL)).unwrapOr("N/A");
+
+const data = await getBubbleHistory();
+if (data.isErr()) {
+  console.error(data.error);
+} else {
+  console.log(data.value);
+  await Bun.write("./data.json", JSON.stringify(data.value));
+}
