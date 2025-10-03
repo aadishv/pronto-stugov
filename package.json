@@ -3,9 +3,6 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
-  "scripts": {
-    "dev": "vite"
-  },
   "devDependencies": {
     "@types/bun": "latest"
   },
@@ -13,6 +10,8 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "@ai-sdk/google": "^2.0.17",
+    "ai": "^5.0.60",
     "ky": "^1.10.0",
     "neverthrow": "^8.2.0"
   }

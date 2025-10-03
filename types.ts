@@ -34,7 +34,8 @@ export interface Message {
   reactionsummary: ReactionSummary[];
   lang: string | null;
   videosession: unknown | null;
-  mentions: Mention[]; // sometimes empty
+  // to satisfy eslint when using json imports
+  mentions: (Mention | any)[]; // sometimes empty
   messagemedia: Media[]; // sometimes empty
   messagetrans: unknown[]; // translation objects not present in sample
   resource: Resource | null;
