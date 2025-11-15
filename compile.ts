@@ -21,9 +21,10 @@ const getParentMessage = (message: Message) =>
     : null;
 const buildXmlFromMessage = (message: Message) => `<message>
 <user>@${message.user.fullname}</user>
+<time>${message.created_at}</time>
 ${
   (getParentMessage(message) &&
-    `
+    `\
 <replying-to>
 <user>@${getParentMessage(message)!.user.fullname}</user>
 <content>

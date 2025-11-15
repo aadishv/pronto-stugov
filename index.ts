@@ -29,7 +29,8 @@ function getBubbleHistory(): ResultAsync<
       let messages = initialHistory.messages;
       let contextualMessages = messages.concat(initialHistory.parentmessages);
       console.log(`Received ${messages.length} messages...`);
-      while (messages.length < 1000) {
+      let totalMessages = 0;
+      while (true) {
         const nextHistory = await ResultAsync.fromPromise(
           ky
             .post("https://stanfordohs.pronto.io/api/v1/bubble.history", {
@@ -49,7 +50,10 @@ function getBubbleHistory(): ResultAsync<
         if (nextHistory.isErr()) {
           return err(nextHistory.error);
         } else {
-          messages = messages.concat(nextHistory.value.messages);
+          totalMessages += nextHistory.value.messages.length;
+          let filtered = nextHistory.value.messages.filter(msg => (new Date()).getTime() - (new Date(msg.created_at)).getTime() <= 3600 * 1000 * 24 * 31);
+          if (filtered.length === 0) break;
+          messages = messages.concat(filtered);
           contextualMessages = messages.concat(
             nextHistory.value.parentmessages,
           );
@@ -65,6 +69,8 @@ const data = await getBubbleHistory();
 if (data.isErr()) {
   console.error(data.error);
 } else {
-  console.log(data.value);
+  for (const message of data.value.messages) {
+    console.log(new Date(message.updated_at));
+  }
   await Bun.write("./data.json", JSON.stringify(data.value));
 }
